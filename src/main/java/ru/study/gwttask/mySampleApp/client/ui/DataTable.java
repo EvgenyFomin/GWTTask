@@ -17,8 +17,8 @@ import ru.study.gwttask.mySampleApp.client.DBServiceAsync;
 import ru.study.gwttask.mySampleApp.shared.Book;
 
 import java.util.Collections;
+import java.util.LinkedList;
 import java.util.List;
-import java.util.Random;
 import java.util.stream.Collectors;
 
 public class DataTable extends Composite {
@@ -29,24 +29,28 @@ public class DataTable extends Composite {
 
     private static DataTableUiBinder ourUiBinder = GWT.create(DataTableUiBinder.class);
 
-    /*------------------------------------------ Table Part --------------------------------------------*/
-
-    private ListDataProvider<Book> listDataProvider = new ListDataProvider<>();
-
     @UiField(provided = true)
     HorizontalPanel fullPanel = new HorizontalPanel();
 
-    VerticalPanel filterPanel = new VerticalPanel();
+    private ListDataProvider<Book> listDataProvider = new ListDataProvider<>();
 
-    VerticalPanel tablePanel = new VerticalPanel();
+    private VerticalPanel tablePanel = new VerticalPanel();
 
-    CellTable<Book> cellTable = new CellTable<>();
+    private CellTable<Book> cellTable = new CellTable<>();
 
-    Button createButton = new Button("Add", getAddClickHandler());
+    private Button createButton = new Button("Add", getAddClickHandler());
 
-    Button removeButton = new Button("Remove", getRemoveClickHandler());
+    private Button removeButton = new Button("Remove", getRemoveClickHandler());
 
-    private RadioButton ownerButton;
+    private boolean filterMode = false;
+
+    private TextBox filterTextBox = new TextBox();
+
+    private List<Book> filterCache = new LinkedList<>();
+
+    private VerticalPanel filterPanel = new VerticalPanel();
+
+    private ColumnNames ownerColumnNames; // Column which Radio Button has enabled
 
     public DataTable() {
         createFilterPart();
@@ -57,34 +61,40 @@ public class DataTable extends Composite {
     private void createFilterPart() {
         VerticalPanel radioPanel = new VerticalPanel();
 
-        RadioButton nameRButton = new RadioButton("Name");
-        RadioButton authorRButton = new RadioButton("Author");
-        RadioButton isbnRButton = new RadioButton("ISBN");
+        final RadioButton nameRButton = new RadioButton("Filter", ColumnNames.NAME.toString()) {{
+            setValue(true);
+        }};
 
-        TextBox valueBox = new TextBox();
+        ownerColumnNames = ColumnNames.NAME;
 
-        radioPanel.add(new HorizontalPanel() {{
-            add(new Label("Name: "));
-            add(nameRButton);
-        }});
+        final RadioButton authorRButton = new RadioButton("Filter", ColumnNames.AUTHOR.toString());
+        final RadioButton isbnRButton = new RadioButton("Filter", ColumnNames.ISBN.toString());
 
-        radioPanel.add(new HorizontalPanel() {{
-            add(new Label("Author: "));
-            add(authorRButton);
-        }});
+        nameRButton.addClickHandler(event -> ownerColumnNames = ColumnNames.NAME);
+        authorRButton.addClickHandler(event -> ownerColumnNames = ColumnNames.AUTHOR);
+        isbnRButton.addClickHandler(event -> ownerColumnNames = ColumnNames.ISBN);
 
-        radioPanel.add(new HorizontalPanel() {{
-            add(new Label("ISBN: "));
-            add(isbnRButton);
-        }});
+        radioPanel.add(nameRButton);
+        radioPanel.add(authorRButton);
+        radioPanel.add(isbnRButton);
 
         radioPanel.add(new HorizontalPanel() {{
             add(new Label("Filter: "));
-            add(valueBox);
+            add(filterTextBox);
+        }});
+
+        Button findButton = new Button("Find");
+        findButton.addClickHandler(getFindClickHandler());
+
+        Button resetButton = new Button("Reset");
+        resetButton.addClickHandler(getResetClickHandler());
+
+        radioPanel.add(new HorizontalPanel() {{
+            add(findButton);
+            add(resetButton);
         }});
 
         filterPanel.add(radioPanel);
-
         fullPanel.add(filterPanel);
     }
 
@@ -95,7 +105,7 @@ public class DataTable extends Composite {
                 return object.getName();
             }
         };
-        cellTable.addColumn(nameColumn, "Name");
+        cellTable.addColumn(nameColumn, ColumnNames.NAME.toString());
 
         TextColumn<Book> authorColumn = new TextColumn<Book>() {
             @Override
@@ -103,7 +113,7 @@ public class DataTable extends Composite {
                 return object.getAuthor();
             }
         };
-        cellTable.addColumn(authorColumn, "Author");
+        cellTable.addColumn(authorColumn, ColumnNames.AUTHOR.toString());
 
         TextColumn<Book> isbnColumn = new TextColumn<Book>() {
             @Override
@@ -111,7 +121,7 @@ public class DataTable extends Composite {
                 return String.valueOf(object.getIsbn());
             }
         };
-        cellTable.addColumn(isbnColumn, "ISBN");
+        cellTable.addColumn(isbnColumn, ColumnNames.ISBN.toString());
 
         Column<Book, String> editColumn = new Column<Book, String>(new ButtonCell()) {
             @Override
@@ -119,10 +129,8 @@ public class DataTable extends Composite {
                 return "Edit";
             }
         };
-
         editColumn.setFieldUpdater(((index, object, value) -> createDialog(object)));
-
-        cellTable.addColumn(editColumn, "Edit");
+        cellTable.addColumn(editColumn, ColumnNames.EDIT.toString());
 
         Column<Book, Boolean> checkBoxColumn = new Column<Book, Boolean>(new CheckboxCell(true, false)) {
             @Override
@@ -130,10 +138,8 @@ public class DataTable extends Composite {
                 return false;
             }
         };
-
         checkBoxColumn.setFieldUpdater((index, object, value) -> object.setChecked(value));
-
-        cellTable.addColumn(checkBoxColumn, "Select");
+        cellTable.addColumn(checkBoxColumn, ColumnNames.SELECT.toString());
 
         listDataProvider.addDataDisplay(cellTable);
 
@@ -162,12 +168,28 @@ public class DataTable extends Composite {
         fullPanel.add(tablePanel);
     }
 
-    private void addRow(List<Book> books) {
-        listDataProvider.getList().addAll(books);
+    // Rows manipulation
+
+    private void addRows(List<Book> books) {
+        if (filterMode) {
+            filterCache.addAll(books);
+            listDataProvider.getList().addAll(ownerColumnNames.filter(books, filterTextBox.getText()));
+        } else {
+            listDataProvider.getList().addAll(books);
+            listDataProvider.refresh();
+        }
+    }
+
+    private void removeRows(List<Book> booksToRemove) {
+        listDataProvider.getList().removeAll(booksToRemove);
         listDataProvider.refresh();
 
-        //TODO Save to DB
+        if (filterMode) {
+            filterCache.removeAll(booksToRemove);
+        }
     }
+
+    // ClickHandlers
 
     private ClickHandler getAddClickHandler() {
         return event -> createDialog(null);
@@ -185,62 +207,56 @@ public class DataTable extends Composite {
 
                 @Override
                 public void onSuccess(Void result) {
-                    listDataProvider.getList().removeAll(booksToRemove);
-                    listDataProvider.refresh();
+                    removeRows(booksToRemove);
                 }
             });
         };
     }
 
-//    @UiHandler("createButton")
-//    void onCreateButtonClick(ClickEvent event) {
-//        createDialog(null);
-//    }
-//
-//    @UiHandler("removeButton")
-//    void onRemoveButtonClick(ClickEvent event) {
-//        List<Book> booksToRemove = listDataProvider.getList().stream().filter(Book::isChecked).collect(Collectors.toList());
-//
-//        serviceAsync.removeByIsbn(booksToRemove.stream().map(Book::getIsbn).collect(Collectors.toList()), new AsyncCallback<Void>() {
-//            @Override
-//            public void onFailure(Throwable caught) {
-//
-//            }
-//
-//            @Override
-//            public void onSuccess(Void result) {
-//                listDataProvider.getList().removeAll(booksToRemove);
-//                listDataProvider.refresh();
-//            }
-//        });
-//    }
+    private ClickHandler getFindClickHandler() {
+        return event -> {
+            if (!filterTextBox.getText().isEmpty()) {
 
-    // only for tests
-//    @Deprecated
-//    public void addRandomRow() {
-//        Book book = new Book();
-//        book.setName(String.valueOf(new Random().nextInt(100)));
-//        book.setAuthor(String.valueOf(new Random().nextInt(100)));
-//        book.setIsbn(getRandomIsbn());
-//
-//        serviceAsync.save(book, new AsyncCallback<Book>() {
-//            @Override
-//            public void onFailure(Throwable caught) {
-//
-//            }
-//
-//            @Override
-//            public void onSuccess(Book result) {
-//
-//            }
-//        });
-//    }
+                // Activating filter mode and copying data to cache
+                if (!filterMode) {
+                    filterMode = true;
+                    filterCache.addAll(listDataProvider.getList());
+//                    Window.alert(String.valueOf(filterCache.size()) + " " + String.valueOf(listDataProvider.getList().size()));
+                }
 
-    private long getRandomIsbn() {
-        return Math.abs(new Random().nextLong());
+                List<Book> newList = ownerColumnNames.filter(filterCache, filterTextBox.getText());
+                listDataProvider.setList(newList);
+
+                listDataProvider.refresh();
+            } else {
+                if (filterMode) {
+                    filterMode = false;
+                    listDataProvider.getList().clear();
+                    listDataProvider.getList().addAll(filterCache);
+                    listDataProvider.refresh();
+
+                    filterCache.clear();
+                }
+            }
+        };
+    }
+
+    private ClickHandler getResetClickHandler() {
+        return event -> {
+            if (filterMode) {
+                filterMode = false;
+                filterTextBox.setText("");
+                listDataProvider.getList().clear();
+                listDataProvider.getList().addAll(filterCache);
+                listDataProvider.refresh();
+
+                filterCache.clear();
+            }
+        };
     }
 
     // Modal Dialog
+
     private DialogBox createDialog(Book book) {
         boolean isNewBook = (book == null);
         final DialogBox dialog = new DialogBox(false, true);
@@ -268,7 +284,7 @@ public class DataTable extends Composite {
 
                     @Override
                     public void onSuccess(Book result) {
-                        addRow(Collections.singletonList(newBook));
+                        addRows(Collections.singletonList(newBook));
                     }
                 });
             } else {
@@ -282,6 +298,10 @@ public class DataTable extends Composite {
                     public void onSuccess(Void result) {
                         Collections.replaceAll(listDataProvider.getList(), book, newBook);
                         listDataProvider.refresh();
+
+                        if (filterMode) {
+                            Collections.replaceAll(filterCache, book, newBook);
+                        }
                     }
                 });
             }
@@ -289,7 +309,7 @@ public class DataTable extends Composite {
 
         dialog.setAnimationEnabled(true);
         dialog.setGlassEnabled(true);
-        dialog.setPopupPosition(500, 150);
+        dialog.setPopupPosition(900, 150);
 
         if (!isNewBook) {
             nameTextBox.setText(book.getName());
@@ -325,8 +345,4 @@ public class DataTable extends Composite {
 
         return dialog;
     }
-
-    /*------------------------------------------ Filter Part --------------------------------------------*/
-
-
 }
