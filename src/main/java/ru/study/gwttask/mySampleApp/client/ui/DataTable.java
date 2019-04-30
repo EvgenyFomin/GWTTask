@@ -1,20 +1,25 @@
 package ru.study.gwttask.mySampleApp.client.ui;
 
+import com.google.gwt.cell.client.ButtonCell;
+import com.google.gwt.cell.client.CheckboxCell;
 import com.google.gwt.core.client.GWT;
-import com.google.gwt.event.dom.client.ClickEvent;
 import com.google.gwt.event.dom.client.ClickHandler;
 import com.google.gwt.uibinder.client.UiBinder;
 import com.google.gwt.uibinder.client.UiField;
-import com.google.gwt.uibinder.client.UiHandler;
+import com.google.gwt.user.cellview.client.CellTable;
+import com.google.gwt.user.cellview.client.Column;
+import com.google.gwt.user.cellview.client.TextColumn;
 import com.google.gwt.user.client.rpc.AsyncCallback;
 import com.google.gwt.user.client.ui.*;
+import com.google.gwt.view.client.ListDataProvider;
 import ru.study.gwttask.mySampleApp.client.DBService;
 import ru.study.gwttask.mySampleApp.client.DBServiceAsync;
 import ru.study.gwttask.mySampleApp.shared.Book;
 
-import java.util.LinkedList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Random;
+import java.util.stream.Collectors;
 
 public class DataTable extends Composite {
     interface DataTableUiBinder extends UiBinder<Widget, DataTable> {
@@ -26,29 +31,111 @@ public class DataTable extends Composite {
 
     /*------------------------------------------ Table Part --------------------------------------------*/
 
-    private static int rowNumber = 1;
+    private ListDataProvider<Book> listDataProvider = new ListDataProvider<>();
 
     @UiField(provided = true)
-    FlexTable flexTable = new FlexTable();
+    HorizontalPanel fullPanel = new HorizontalPanel();
 
-    enum Columns {
-        NAME,
-        AUTHOR,
-        ISBN,
-        EDIT,
-        SELECT
-    }
+    VerticalPanel filterPanel = new VerticalPanel();
 
-    @UiField(provided = true)
-    Button createButton = new Button("Add");
+    VerticalPanel tablePanel = new VerticalPanel();
 
-    @UiField(provided = true)
-    Button removeButton = new Button("Remove");
+    CellTable<Book> cellTable = new CellTable<>();
+
+    Button createButton = new Button("Add", getAddClickHandler());
+
+    Button removeButton = new Button("Remove", getRemoveClickHandler());
+
+    private RadioButton ownerButton;
 
     public DataTable() {
-        for (Columns currentColumn : Columns.values()) {
-            flexTable.setText(0, currentColumn.ordinal(), currentColumn.toString());
-        }
+        createFilterPart();
+        createTablePart();
+        initWidget(ourUiBinder.createAndBindUi(this));
+    }
+
+    private void createFilterPart() {
+        VerticalPanel radioPanel = new VerticalPanel();
+
+        RadioButton nameRButton = new RadioButton("Name");
+        RadioButton authorRButton = new RadioButton("Author");
+        RadioButton isbnRButton = new RadioButton("ISBN");
+
+        TextBox valueBox = new TextBox();
+
+        radioPanel.add(new HorizontalPanel() {{
+            add(new Label("Name: "));
+            add(nameRButton);
+        }});
+
+        radioPanel.add(new HorizontalPanel() {{
+            add(new Label("Author: "));
+            add(authorRButton);
+        }});
+
+        radioPanel.add(new HorizontalPanel() {{
+            add(new Label("ISBN: "));
+            add(isbnRButton);
+        }});
+
+        radioPanel.add(new HorizontalPanel() {{
+            add(new Label("Filter: "));
+            add(valueBox);
+        }});
+
+        filterPanel.add(radioPanel);
+
+        fullPanel.add(filterPanel);
+    }
+
+    private void createTablePart() {
+        TextColumn<Book> nameColumn = new TextColumn<Book>() {
+            @Override
+            public String getValue(Book object) {
+                return object.getName();
+            }
+        };
+        cellTable.addColumn(nameColumn, "Name");
+
+        TextColumn<Book> authorColumn = new TextColumn<Book>() {
+            @Override
+            public String getValue(Book object) {
+                return object.getAuthor();
+            }
+        };
+        cellTable.addColumn(authorColumn, "Author");
+
+        TextColumn<Book> isbnColumn = new TextColumn<Book>() {
+            @Override
+            public String getValue(Book object) {
+                return String.valueOf(object.getIsbn());
+            }
+        };
+        cellTable.addColumn(isbnColumn, "ISBN");
+
+        Column<Book, String> editColumn = new Column<Book, String>(new ButtonCell()) {
+            @Override
+            public String getValue(Book object) {
+                return "Edit";
+            }
+        };
+
+        editColumn.setFieldUpdater(((index, object, value) -> createDialog(object)));
+
+        cellTable.addColumn(editColumn, "Edit");
+
+        Column<Book, Boolean> checkBoxColumn = new Column<Book, Boolean>(new CheckboxCell(true, false)) {
+            @Override
+            public Boolean getValue(Book object) {
+                return false;
+            }
+        };
+
+        checkBoxColumn.setFieldUpdater((index, object, value) -> object.setChecked(value));
+
+        cellTable.addColumn(checkBoxColumn, "Select");
+
+        listDataProvider.addDataDisplay(cellTable);
 
         serviceAsync.findAll(new AsyncCallback<List<Book>>() {
             @Override
@@ -58,64 +145,75 @@ public class DataTable extends Composite {
 
             @Override
             public void onSuccess(List<Book> result) {
-                for (Book currentBook : result) {
-                    addRow(currentBook);
+                cellTable.setRowCount(result.size(), true);
+                cellTable.setRowData(0, result);
+
+                listDataProvider.getList().addAll(result);
+                listDataProvider.refresh();
+            }
+        });
+
+        tablePanel.add(cellTable);
+        tablePanel.add(new HorizontalPanel() {{
+            add(createButton);
+            add(removeButton);
+        }});
+
+        fullPanel.add(tablePanel);
+    }
+
+    private void addRow(List<Book> books) {
+        listDataProvider.getList().addAll(books);
+        listDataProvider.refresh();
+
+        //TODO Save to DB
+    }
+
+    private ClickHandler getAddClickHandler() {
+        return event -> createDialog(null);
+    }
+
+    private ClickHandler getRemoveClickHandler() {
+        return event -> {
+            List<Book> booksToRemove = listDataProvider.getList().stream().filter(Book::isChecked).collect(Collectors.toList());
+
+            serviceAsync.removeByIsbn(booksToRemove.stream().map(Book::getIsbn).collect(Collectors.toList()), new AsyncCallback<Void>() {
+                @Override
+                public void onFailure(Throwable caught) {
+
                 }
-            }
-        });
 
-        initWidget(ourUiBinder.createAndBindUi(this));
+                @Override
+                public void onSuccess(Void result) {
+                    listDataProvider.getList().removeAll(booksToRemove);
+                    listDataProvider.refresh();
+                }
+            });
+        };
     }
 
-    private void addRow(Book book) {
-        flexTable.setText(rowNumber, Columns.NAME.ordinal(), book.getName());
-        flexTable.setText(rowNumber, Columns.AUTHOR.ordinal(), book.getAuthor());
-        flexTable.setText(rowNumber, Columns.ISBN.ordinal(), String.valueOf(book.getIsbn()));
-        flexTable.setWidget(rowNumber, Columns.EDIT.ordinal(), createEditButton(rowNumber));
-        flexTable.setWidget(rowNumber, Columns.SELECT.ordinal(), createCheckBox());
-
-        rowNumber++;
-    }
-
-    @UiHandler("createButton")
-    void onCreateButtonClick(ClickEvent event) {
-        createDialog(true, -1);
-    }
-
-    @UiHandler("removeButton")
-    void onRemoveButtonClick(ClickEvent event) {
-        LinkedList<Integer> rows = new LinkedList<>();
-        for (int i = 1; i < flexTable.getRowCount(); i++) {
-            if (((CheckBox) flexTable.getWidget(i, Columns.SELECT.ordinal())).getValue()) {
-                rows.addFirst(i);
-            }
-        }
-
-        removeRows(rows);
-    }
-
-    private void removeRows(List<Integer> rows) {
-        List<Long> isbns = new LinkedList<>();
-        for (Integer currentRowId : rows) {
-            isbns.add(Long.parseLong(flexTable.getText(currentRowId, Columns.ISBN.ordinal())));
-        }
-
-        serviceAsync.removeByIsbn(isbns, new AsyncCallback<Void>() {
-            @Override
-            public void onFailure(Throwable caught) {
-
-            }
-
-            @Override
-            public void onSuccess(Void result) {
-
-            }
-        });
-
-        for (Integer currentRowId : rows) {
-            flexTable.removeRow(currentRowId);
-        }
-    }
+//    @UiHandler("createButton")
+//    void onCreateButtonClick(ClickEvent event) {
+//        createDialog(null);
+//    }
+//
+//    @UiHandler("removeButton")
+//    void onRemoveButtonClick(ClickEvent event) {
+//        List<Book> booksToRemove = listDataProvider.getList().stream().filter(Book::isChecked).collect(Collectors.toList());
+//
+//        serviceAsync.removeByIsbn(booksToRemove.stream().map(Book::getIsbn).collect(Collectors.toList()), new AsyncCallback<Void>() {
+//            @Override
+//            public void onFailure(Throwable caught) {
+//
+//            }
+//
+//            @Override
+//            public void onSuccess(Void result) {
+//                listDataProvider.getList().removeAll(booksToRemove);
+//                listDataProvider.refresh();
+//            }
+//        });
+//    }
 
     // only for tests
 //    @Deprecated
@@ -142,16 +240,9 @@ public class DataTable extends Composite {
         return Math.abs(new Random().nextLong());
     }
 
-    private Button createEditButton(int id) {
-        return new Button("Edit", (ClickHandler) event -> createDialog(false, id));
-    }
-
-    private CheckBox createCheckBox() {
-        return new CheckBox();
-    }
-
     // Modal Dialog
-    private DialogBox createDialog(boolean isNewBook, int id) {
+    private DialogBox createDialog(Book book) {
+        boolean isNewBook = (book == null);
         final DialogBox dialog = new DialogBox(false, true);
         Button saveButton = new Button("Save");
         Button closeButton = new Button("Close", (ClickHandler) event -> dialog.hide());
@@ -177,16 +268,11 @@ public class DataTable extends Composite {
 
                     @Override
                     public void onSuccess(Book result) {
-                        addRow(newBook);
+                        addRow(Collections.singletonList(newBook));
                     }
                 });
             } else {
-                Book oldBook = new Book();
-                oldBook.setName(flexTable.getText(id, 0));
-                oldBook.setAuthor(flexTable.getText(id, 1));
-                oldBook.setIsbn(Long.parseLong(flexTable.getText(id, 2)));
-
-                serviceAsync.editBook(oldBook, newBook, new AsyncCallback<Void>() {
+                serviceAsync.editBook(book, newBook, new AsyncCallback<Void>() {
                     @Override
                     public void onFailure(Throwable caught) {
 
@@ -194,9 +280,8 @@ public class DataTable extends Composite {
 
                     @Override
                     public void onSuccess(Void result) {
-                        flexTable.setText(id, Columns.NAME.ordinal(), nameTextBox.getText());
-                        flexTable.setText(id, Columns.AUTHOR.ordinal(), authorTextBox.getText());
-                        flexTable.setText(id, Columns.ISBN.ordinal(), isbnTextBox.getText());
+                        Collections.replaceAll(listDataProvider.getList(), book, newBook);
+                        listDataProvider.refresh();
                     }
                 });
             }
@@ -207,9 +292,9 @@ public class DataTable extends Composite {
         dialog.setPopupPosition(500, 150);
 
         if (!isNewBook) {
-            nameTextBox.setText(flexTable.getText(id, Columns.NAME.ordinal()));
-            authorTextBox.setText(flexTable.getText(id, Columns.AUTHOR.ordinal()));
-            isbnTextBox.setText(flexTable.getText(id, Columns.ISBN.ordinal()));
+            nameTextBox.setText(book.getName());
+            authorTextBox.setText(book.getAuthor());
+            isbnTextBox.setText(String.valueOf(book.getIsbn()));
         }
 
         HorizontalPanel namePanel = new HorizontalPanel();

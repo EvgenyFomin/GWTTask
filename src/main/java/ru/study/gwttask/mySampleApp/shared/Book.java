@@ -16,6 +16,9 @@ public class Book implements Serializable {
 
     private long isbn;
 
+    @Transient
+    private boolean checked = false;
+
     public int getId() {
         return id;
     }
@@ -42,5 +45,13 @@ public class Book implements Serializable {
 
     public void setIsbn(long isbn) {
         this.isbn = isbn;
+    }
+
+    public boolean isChecked() {
+        return checked;
+    }
+
+    public void setChecked(boolean checked) {
+        this.checked = checked;
     }
 }
