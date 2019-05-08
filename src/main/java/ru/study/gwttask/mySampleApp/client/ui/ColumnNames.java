@@ -2,14 +2,12 @@ package ru.study.gwttask.mySampleApp.client.ui;
 
 import ru.study.gwttask.mySampleApp.shared.Book;
 
-import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * Enum of Column names with filter and sort functionality
+ * Enum of Column names with filter functionality
 */
-
 public enum ColumnNames {
     NAME {
         @Override
@@ -21,9 +19,8 @@ public enum ColumnNames {
         }
 
         @Override
-        public List<Book> sort(List<Book> books) {
-            books.sort(Comparator.comparing(Book::getName));
-            return books;
+        public String toString() {
+            return LocalUtil.getLocal().name();
         }
     },
 
@@ -37,9 +34,8 @@ public enum ColumnNames {
         }
 
         @Override
-        public List<Book> sort(List<Book> books) {
-            books.sort(Comparator.comparing(Book::getAuthor));
-            return books;
+        public String toString() {
+            return LocalUtil.getLocal().author();
         }
     },
 
@@ -53,18 +49,26 @@ public enum ColumnNames {
         }
 
         @Override
-        public List<Book> sort(List<Book> books) {
-            books.sort(Comparator.comparingLong(Book::getIsbn));
-            return books;
+        public String toString() {
+            return LocalUtil.getLocal().isbn();
         }
+    },
 
-    }, EDIT, SELECT;
+    EDIT {
+        @Override
+        public String toString() {
+            return LocalUtil.getLocal().edit();
+        }
+    },
+
+    SELECT {
+        @Override
+        public String toString() {
+            return LocalUtil.getLocal().select();
+        }
+    };
 
     public List<Book> filter(List<Book> books, String filterExpression) {
         throw new UnsupportedOperationException("Filtering by " +  this.toString() + " column doesn't support");
-    }
-
-    public List<Book> sort(List<Book> books) {
-        throw new UnsupportedOperationException("Sorting by " +  this.toString() + " column doesn't support");
     }
 }

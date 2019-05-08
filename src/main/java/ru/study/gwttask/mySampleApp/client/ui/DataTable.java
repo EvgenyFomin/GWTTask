@@ -1,5 +1,9 @@
 package ru.study.gwttask.mySampleApp.client.ui;
 
+import com.github.gwtbootstrap.client.ui.Button;
+import com.github.gwtbootstrap.client.ui.Label;
+import com.github.gwtbootstrap.client.ui.RadioButton;
+import com.github.gwtbootstrap.client.ui.TextBox;
 import com.google.gwt.cell.client.ButtonCell;
 import com.google.gwt.cell.client.CheckboxCell;
 import com.google.gwt.core.client.GWT;
@@ -9,14 +13,17 @@ import com.google.gwt.uibinder.client.UiField;
 import com.google.gwt.user.cellview.client.CellTable;
 import com.google.gwt.user.cellview.client.Column;
 import com.google.gwt.user.cellview.client.TextColumn;
+import com.google.gwt.user.client.Window;
 import com.google.gwt.user.client.rpc.AsyncCallback;
 import com.google.gwt.user.client.ui.*;
 import com.google.gwt.view.client.ListDataProvider;
 import ru.study.gwttask.mySampleApp.client.DBService;
 import ru.study.gwttask.mySampleApp.client.DBServiceAsync;
+import ru.study.gwttask.mySampleApp.client.ui.localization.ResourceBundle;
 import ru.study.gwttask.mySampleApp.shared.Book;
 
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -29,8 +36,12 @@ public class DataTable extends Composite {
 
     private static DataTableUiBinder ourUiBinder = GWT.create(DataTableUiBinder.class);
 
+    private static ResourceBundle local = LocalUtil.getLocal();
+
     @UiField(provided = true)
-    HorizontalPanel fullPanel = new HorizontalPanel();
+    HorizontalPanel fullPanel = new HorizontalPanel() {{
+        setStyleName("container row");
+    }};
 
     private ListDataProvider<Book> listDataProvider = new ListDataProvider<>();
 
@@ -38,9 +49,11 @@ public class DataTable extends Composite {
 
     private CellTable<Book> cellTable = new CellTable<>();
 
-    private Button createButton = new Button("Add", getAddClickHandler());
+    private Button createButton = new Button(local.add(), getAddClickHandler());
 
-    private Button removeButton = new Button("Remove", getRemoveClickHandler());
+    private Button removeButton = new Button(local.remove(), getRemoveClickHandler());
+
+    private HashSet<Long> isbns = new HashSet<>();
 
     private boolean filterMode = false;
 
@@ -78,15 +91,13 @@ public class DataTable extends Composite {
         radioPanel.add(authorRButton);
         radioPanel.add(isbnRButton);
 
-        radioPanel.add(new HorizontalPanel() {{
-            add(new Label("Filter: "));
-            add(filterTextBox);
-        }});
+        radioPanel.add(new Label(local.expression()));
+        radioPanel.add(filterTextBox);
 
-        Button findButton = new Button("Find");
+        Button findButton = new Button(local.find());
         findButton.addClickHandler(getFindClickHandler());
 
-        Button resetButton = new Button("Reset");
+        Button resetButton = new Button(local.reset());
         resetButton.addClickHandler(getResetClickHandler());
 
         radioPanel.add(new HorizontalPanel() {{
@@ -126,7 +137,7 @@ public class DataTable extends Composite {
         Column<Book, String> editColumn = new Column<Book, String>(new ButtonCell()) {
             @Override
             public String getValue(Book object) {
-                return "Edit";
+                return local.edit();
             }
         };
         editColumn.setFieldUpdater(((index, object, value) -> createDialog(object)));
@@ -156,6 +167,8 @@ public class DataTable extends Composite {
 
                 listDataProvider.getList().addAll(result);
                 listDataProvider.refresh();
+
+                isbns.addAll(listDataProvider.getList().stream().map(Book::getIsbn).collect(Collectors.toList()));
             }
         });
 
@@ -221,7 +234,6 @@ public class DataTable extends Composite {
                 if (!filterMode) {
                     filterMode = true;
                     filterCache.addAll(listDataProvider.getList());
-//                    Window.alert(String.valueOf(filterCache.size()) + " " + String.valueOf(listDataProvider.getList().size()));
                 }
 
                 List<Book> newList = ownerColumnNames.filter(filterCache, filterTextBox.getText());
@@ -259,57 +271,75 @@ public class DataTable extends Composite {
 
     private DialogBox createDialog(Book book) {
         boolean isNewBook = (book == null);
-        final DialogBox dialog = new DialogBox(false, true);
-        Button saveButton = new Button("Save");
-        Button closeButton = new Button("Close", (ClickHandler) event -> dialog.hide());
+        final DialogBox dialog = new DialogBox(true, true);
+
+        Button saveButton = new Button(isNewBook ? local.add() : local.save());
+        Button closeButton = new Button(local.cancel(), event -> dialog.hide());
         TextBox nameTextBox = new TextBox();
         TextBox authorTextBox = new TextBox();
         TextBox isbnTextBox = new TextBox();
         Label nameLabel = new Label("Name: ");
         Label authorLabel = new Label("Author: ");
         Label isbnLabel = new Label("ISBN: ");
+        Label errorLabel = new Label() {{
+            setStyleName("text-error");
+        }};
 
         saveButton.addClickHandler(event -> {
             Book newBook = new Book();
             newBook.setName(nameTextBox.getText());
             newBook.setAuthor(authorTextBox.getText());
-            newBook.setIsbn(Long.parseLong(isbnTextBox.getText()));
+            String errorMsg = "";
 
-            if (isNewBook) {
-                serviceAsync.save(newBook, new AsyncCallback<Book>() {
-                    @Override
-                    public void onFailure(Throwable caught) {
+            try {
+                newBook.setIsbn(Long.parseLong(isbnTextBox.getText()));
+            } catch (NumberFormatException e) {
+                errorMsg = "Incorrect ISBN";
+                errorLabel.setText(errorMsg);
+            }
 
-                    }
+            if (errorMsg.isEmpty()) {
+                errorMsg = isValidBook(newBook);
+            }
 
-                    @Override
-                    public void onSuccess(Book result) {
-                        addRows(Collections.singletonList(newBook));
-                    }
-                });
-            } else {
-                serviceAsync.editBook(book, newBook, new AsyncCallback<Void>() {
-                    @Override
-                    public void onFailure(Throwable caught) {
+            errorLabel.setText(!errorMsg.isEmpty() ? errorMsg : "");
 
-                    }
+            if (errorMsg.isEmpty()) {
+                if (isNewBook) {
+                    serviceAsync.save(newBook, new AsyncCallback<Book>() {
+                        @Override
+                        public void onFailure(Throwable caught) {
 
-                    @Override
-                    public void onSuccess(Void result) {
-                        Collections.replaceAll(listDataProvider.getList(), book, newBook);
-                        listDataProvider.refresh();
-
-                        if (filterMode) {
-                            Collections.replaceAll(filterCache, book, newBook);
                         }
-                    }
-                });
+
+                        @Override
+                        public void onSuccess(Book result) {
+                            addRows(Collections.singletonList(newBook));
+                        }
+                    });
+                } else {
+                    serviceAsync.editBook(book, newBook, new AsyncCallback<Void>() {
+                        @Override
+                        public void onFailure(Throwable caught) {
+
+                        }
+
+                        @Override
+                        public void onSuccess(Void result) {
+                            Collections.replaceAll(listDataProvider.getList(), book, newBook);
+                            listDataProvider.refresh();
+
+                            if (filterMode) {
+                                Collections.replaceAll(filterCache, book, newBook);
+                            }
+                        }
+                    });
+                }
             }
         });
 
         dialog.setAnimationEnabled(true);
         dialog.setGlassEnabled(true);
-        dialog.setPopupPosition(900, 150);
 
         if (!isNewBook) {
             nameTextBox.setText(book.getName());
@@ -338,11 +368,28 @@ public class DataTable extends Composite {
         vPanel.add(namePanel);
         vPanel.add(authorPanel);
         vPanel.add(isbnPanel);
+        vPanel.add(errorLabel);
         vPanel.add(buttonPanel);
 
         dialog.setWidget(vPanel);
         dialog.show();
 
         return dialog;
+    }
+
+    // Validation
+    private String isValidBook(Book book) {
+        Window.alert(isbns.toString() + " " + book.getIsbn());
+        if (book.getName().isEmpty()) {
+            return "Book's name is empty";
+        } else if (book.getAuthor().isEmpty()) {
+            return "Book's author is empty";
+        } else if (book.getIsbn() < 0) {
+            return "Incorrect ISBN";
+        } else if (listDataProvider.getList().contains(book) || filterCache.contains(book)) {
+            return "This book already exists";
+        } else if (!isbns.add(book.getIsbn())) {
+            return "This ISBN already exists";
+        } else return "";
     }
 }
