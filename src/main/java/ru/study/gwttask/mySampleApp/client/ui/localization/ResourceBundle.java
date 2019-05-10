@@ -28,4 +28,16 @@ public interface ResourceBundle extends Messages {
     String library();
 
     String expression();
+
+    String booksNameEmpty();
+
+    String booksAuthorEmpty();
+
+    String incorrectIsbn();
+
+    String bookAlreadyExists();
+
+    String isbnAlreadyExists();
+
+    String date();
 }

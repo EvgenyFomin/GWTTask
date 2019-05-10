@@ -13,7 +13,6 @@ import com.google.gwt.uibinder.client.UiField;
 import com.google.gwt.user.cellview.client.CellTable;
 import com.google.gwt.user.cellview.client.Column;
 import com.google.gwt.user.cellview.client.TextColumn;
-import com.google.gwt.user.client.Window;
 import com.google.gwt.user.client.rpc.AsyncCallback;
 import com.google.gwt.user.client.ui.*;
 import com.google.gwt.view.client.ListDataProvider;
@@ -22,10 +21,7 @@ import ru.study.gwttask.mySampleApp.client.DBServiceAsync;
 import ru.study.gwttask.mySampleApp.client.ui.localization.ResourceBundle;
 import ru.study.gwttask.mySampleApp.shared.Book;
 
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.LinkedList;
-import java.util.List;
+import java.util.*;
 import java.util.stream.Collectors;
 
 public class DataTable extends Composite {
@@ -152,6 +148,14 @@ public class DataTable extends Composite {
         checkBoxColumn.setFieldUpdater((index, object, value) -> object.setChecked(value));
         cellTable.addColumn(checkBoxColumn, ColumnNames.SELECT.toString());
 
+        TextColumn<Book> dateColumn = new TextColumn<Book>() {
+            @Override
+            public String getValue(Book object) {
+                return String.valueOf(object.getDate());
+            }
+        };
+        cellTable.addColumn(dateColumn, ColumnNames.DATE.toString());
+
         listDataProvider.addDataDisplay(cellTable);
 
         serviceAsync.findAll(new AsyncCallback<List<Book>>() {
@@ -182,7 +186,6 @@ public class DataTable extends Composite {
     }
 
     // Rows manipulation
-
     private void addRows(List<Book> books) {
         if (filterMode) {
             filterCache.addAll(books);
@@ -203,7 +206,6 @@ public class DataTable extends Composite {
     }
 
     // ClickHandlers
-
     private ClickHandler getAddClickHandler() {
         return event -> createDialog(null);
     }
@@ -268,7 +270,6 @@ public class DataTable extends Composite {
     }
 
     // Modal Dialog
-
     private DialogBox createDialog(Book book) {
         boolean isNewBook = (book == null);
         final DialogBox dialog = new DialogBox(true, true);
@@ -278,9 +279,9 @@ public class DataTable extends Composite {
         TextBox nameTextBox = new TextBox();
         TextBox authorTextBox = new TextBox();
         TextBox isbnTextBox = new TextBox();
-        Label nameLabel = new Label("Name: ");
-        Label authorLabel = new Label("Author: ");
-        Label isbnLabel = new Label("ISBN: ");
+        Label nameLabel = new Label(local.name() + ":");
+        Label authorLabel = new Label(local.author() + ":");
+        Label isbnLabel = new Label(local.isbn() + ":");
         Label errorLabel = new Label() {{
             setStyleName("text-error");
         }};
@@ -289,12 +290,13 @@ public class DataTable extends Composite {
             Book newBook = new Book();
             newBook.setName(nameTextBox.getText());
             newBook.setAuthor(authorTextBox.getText());
+            newBook.setDate(new Date().toString());
             String errorMsg = "";
 
             try {
                 newBook.setIsbn(Long.parseLong(isbnTextBox.getText()));
             } catch (NumberFormatException e) {
-                errorMsg = "Incorrect ISBN";
+                errorMsg = local.incorrectIsbn();
                 errorLabel.setText(errorMsg);
             }
 
@@ -363,15 +365,14 @@ public class DataTable extends Composite {
         buttonPanel.add(saveButton);
         buttonPanel.add(closeButton);
 
-        VerticalPanel vPanel = new VerticalPanel();
-        vPanel.setSpacing(2);
-        vPanel.add(namePanel);
-        vPanel.add(authorPanel);
-        vPanel.add(isbnPanel);
-        vPanel.add(errorLabel);
-        vPanel.add(buttonPanel);
+        VerticalPanel editPanel = new VerticalPanel();
+        editPanel.add(namePanel);
+        editPanel.add(authorPanel);
+        editPanel.add(isbnPanel);
+        editPanel.add(errorLabel);
+        editPanel.add(buttonPanel);
 
-        dialog.setWidget(vPanel);
+        dialog.setWidget(editPanel);
         dialog.show();
 
         return dialog;
@@ -379,17 +380,18 @@ public class DataTable extends Composite {
 
     // Validation
     private String isValidBook(Book book) {
-        Window.alert(isbns.toString() + " " + book.getIsbn());
         if (book.getName().isEmpty()) {
-            return "Book's name is empty";
+            return local.booksNameEmpty();
         } else if (book.getAuthor().isEmpty()) {
-            return "Book's author is empty";
+            return local.booksAuthorEmpty();
         } else if (book.getIsbn() < 0) {
-            return "Incorrect ISBN";
+            return local.incorrectIsbn();
         } else if (listDataProvider.getList().contains(book) || filterCache.contains(book)) {
-            return "This book already exists";
+            return local.bookAlreadyExists();
         } else if (!isbns.add(book.getIsbn())) {
-            return "This ISBN already exists";
-        } else return "";
+            return local.isbnAlreadyExists();
+        } else {
+            return "";
+        }
     }
 }

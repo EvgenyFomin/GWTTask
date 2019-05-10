@@ -20,6 +20,8 @@ public class Book implements Serializable {
     @Transient
     private boolean checked = false;
 
+    private String date;
+
     public int getId() {
         return id;
     }
@@ -54,6 +56,14 @@ public class Book implements Serializable {
 
     public void setChecked(boolean checked) {
         this.checked = checked;
+    }
+
+    public String getDate() {
+        return date;
+    }
+
+    public void setDate(String date) {
+        this.date = date;
     }
 
     @Override

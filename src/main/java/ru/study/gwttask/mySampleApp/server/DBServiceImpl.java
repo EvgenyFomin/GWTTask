@@ -21,13 +21,6 @@ public class DBServiceImpl extends RemoteServiceServlet implements DBService {
     }
 
     @Override
-    public Book findById(int id) {
-        try (Session session = getOpenedSession()) {
-            return session.find(Book.class, id);
-        }
-    }
-
-    @Override
     public void removeByIsbn(List<Long> isbns) {
         try (Session session = getOpenedSession()) {
             session.beginTransaction();
@@ -55,17 +48,6 @@ public class DBServiceImpl extends RemoteServiceServlet implements DBService {
 
             query.executeUpdate();
 
-            session.getTransaction().commit();
-        }
-    }
-
-    @Override
-    @Deprecated
-    public void removeById(int id) {
-        try (Session session = getOpenedSession()) {
-            session.beginTransaction();
-            Query query = session.createQuery("delete from Book where id = :id").setParameter("id", id);
-            query.executeUpdate();
             session.getTransaction().commit();
         }
     }

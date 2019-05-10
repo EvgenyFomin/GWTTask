@@ -10,10 +10,6 @@ import java.util.List;
 public interface DBService extends RemoteService {
     List<Book> findAll();
 
-    Book findById(int id);
-
-    void removeById(int id);
-
     Book save(Book book);
 
     void removeByIsbn(List<Long> isbns);

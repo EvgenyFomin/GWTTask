@@ -66,6 +66,13 @@ public enum ColumnNames {
         public String toString() {
             return LocalUtil.getLocal().select();
         }
+    },
+
+    DATE {
+        @Override
+        public String toString() {
+            return LocalUtil.getLocal().date();
+        }
     };
 
     public List<Book> filter(List<Book> books, String filterExpression) {

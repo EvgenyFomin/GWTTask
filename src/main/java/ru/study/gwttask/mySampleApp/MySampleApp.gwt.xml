@@ -16,6 +16,5 @@
     <servlet path='/DBService' class='ru.study.gwttask.mySampleApp.server.DBServiceImpl'/>
 
     <source path='client'/>
-    <source path='validation'/>
     <source path='shared'/>
 </module>
